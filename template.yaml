@@ -1,0 +1,60 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Real-time HL7 Lab Result Processing (.NET 8, Lambda, S3, DynamoDB)
+
+Globals:
+  Function:
+    Runtime: dotnet8
+    Timeout: 30
+    MemorySize: 512
+    Architectures:
+      - arm64
+
+Resources:
+  LabResultsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: LabResultsProcessor
+      CodeUri: ./LabResultProcessor.Function/src/LabResultProcessor.Function
+      Handler: LabResultProcessor.Function::LabResultProcessor.Function.Function::HandleAsync
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - AmazonS3ReadOnlyAccess
+      Environment:
+        Variables:
+          LAB_RESULTS_TABLE: !Ref LabResultsTable
+      Events:
+        LabResultsFileUploaded:
+          Type: S3
+          Properties:
+            Bucket: !Ref LabResultsBucket
+            Events: s3:ObjectCreated:*
+
+  LabResultsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::AccountId}-lab-results-in"
+
+  LabResultsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: LabResults
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PatientId
+          AttributeType: S
+        - AttributeName: ResultKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PatientId
+          KeyType: HASH
+        - AttributeName: ResultKey
+          KeyType: RANGE
+
+Outputs:
+  FunctionName:
+    Value: !Ref LabResultsFunction
+  LabResultsBucketName:
+    Value: !Ref LabResultsBucket
+  LabResultsTableName:
+    Value: !Ref LabResultsTable
